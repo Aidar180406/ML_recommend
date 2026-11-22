@@ -11,6 +11,8 @@ import seaborn as sns
 from recommender import MovieRecommender
 
 
+
+
 # ------------------- Настройка страницы -------------------
 st.set_page_config(
     page_title="Movie Recommender",
@@ -106,6 +108,7 @@ mode = st.sidebar.radio(
         "Похожие фильмы",
         "Персональные (по User-ID)",
         "Гибридные рекомендации",
+        "Content-based (по movieId)",
         "Справка",
     ],
     index=0,
@@ -269,6 +272,66 @@ elif mode == "Персональные (по User-ID)":
             ax.set_title(f"Рекомендации для User-ID = {user_id}")
             plt.tight_layout()
             st.pyplot(fig)
+
+elif mode == "Content-based (по movieId)":
+    st.subheader("Content-based рекомендации (по жанрам и названию)")
+    st.caption(
+        "Используем TF-IDF по жанрам + названию фильма. "
+        "Не смотрим на оценки пользователей — только на контент."
+    )
+
+    # Выбираем фильм-источник по movieId
+    movie_id = st.selectbox(
+        "Выберите фильм-источник (movieId):",
+        options=rec.known_movie_ids,
+        format_func=lambda x: (
+            rec.movies_content.loc[
+                rec.movies_content["movieId"] == x, "title"
+            ].iloc[0]
+        ),
+    )
+
+    if st.button("Найти похожие по контенту", type="primary"):
+        with st.spinner("Ищем похожие фильмы..."):
+            sim = rec.content_based_recommend(movie_id, n=n_recs)
+
+        if sim.empty:
+            st.warning("Для этого фильма не найдено похожих.")
+        else:
+            # Показываем фильм-источник
+            source_title = rec.movies_content.loc[
+                rec.movies_content["movieId"] == movie_id, "title"
+            ].iloc[0]
+            source_genres = rec.movies_content.loc[
+                rec.movies_content["movieId"] == movie_id, "genres"
+            ].iloc[0]
+            st.info(f"**Источник:** {source_title}  \n**Жанры:** {source_genres}")
+            st.success(f"Топ-{len(sim)} похожих фильмов:")
+
+            # Карточки
+            for i, row in sim.iterrows():
+                st.markdown(
+                    f'<div class="movie-card">'
+                    f'<span class="movie-rank">{i + 1}</span>'
+                    f'<b>{row["title"]}</b> '
+                    f'<span class="score-text">— схожесть {row["Similarity"]:.2%}</span>'
+                    f'<br><small style="color:#666"> Жанр: {row["genres"]}</small>'
+                    f'</div>',
+                    unsafe_allow_html=True,
+                )
+
+            # График
+            fig, ax = plt.subplots(figsize=(10, 6))
+            sns.barplot(
+                data=sim, y="title", x="Similarity",
+                palette="plasma", ax=ax,
+            )
+            ax.set_xlabel("Косинусное сходство (TF-IDF)")
+            ax.set_ylabel("")
+            ax.set_title(f"Content-based: похожие на «{source_title}»")
+            plt.tight_layout()
+            st.pyplot(fig)
+
 
 elif mode == "Справка":
     st.subheader("Справка по режимам и параметрам")
